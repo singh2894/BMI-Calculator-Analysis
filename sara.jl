@@ -1,11 +1,12 @@
 using Pkg
 Pkg.add("CSV")
 Pkg.resolve()
+
 using CSV
 using DataFrames
 
 # Replace "filename.csv" with the actual CSV file name in your repository
-df = CSV.read("Gender_Classification_Data.csv", DataFrame)
+df = CSV.read("updated_Gender_Classification_Data.csv", DataFrame)
 
 # Display the first few rows
 println(first(df, 5))
@@ -52,5 +53,5 @@ end
 df.BMI_Index = map(bmi_index, df.BMI)
 println(first(df, 5))
 
-# Save the updated DataFrame to a new CSV file adding some thing tom see changes
+# Save the updated DataFrame to a new CSV file
 CSV.write("updated_Gender_Classification_Data.csv", df) 
