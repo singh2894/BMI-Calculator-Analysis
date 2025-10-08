@@ -3,6 +3,7 @@ Pkg.add("CSV")
 Pkg.resolve()
 using CSV
 using DataFrames
+include("src-bmi-index.jl")
 
 # Replace "filename.csv" with the actual CSV file name in your repository
 df = CSV.read("Gender_Classification_Data.csv", DataFrame)
@@ -35,19 +36,20 @@ df.BMI = df.weight ./ (df.height ./ 100) .^ 2
 println(first(df, 5))   
 
 
-function bmi_index(bmi)
-    if bmi < 18.5
-        return 1  # Underweight
-    elseif bmi < 25
-        return 2  # Normal
-    elseif bmi < 30
-        return 3  # Overweight
-    elseif bmi < 35
-        return 4  # Obese Class I
-    else
-        return 5  # Obese Class II+
-    end
-end
+
+# function bmi_index(bmi)
+#     if bmi < 18.5
+#         return 1  # Underweight
+#     elseif bmi < 25
+#         return 2  # Normal
+#     elseif bmi < 30
+#         return 3  # Overweight
+#     elseif bmi < 35
+#         return 4  # Obese Class I
+#     else
+#         return 5  # Obese Class II+
+#     end
+# end
 
 df.BMI_Index = map(bmi_index, df.BMI)
 println(first(df, 5))
