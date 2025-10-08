@@ -193,6 +193,6 @@ layout_cdf = Layout(
     legend = attr(x=0.02, y=0.98)
 )
 
-display(plot([trace_curve, trace_p10, trace_p90, trace_point], layout_cdf))
-
+display(plot([trace_curve, trace_p10, trace_p90, trace_point], layout_cdf)) 
+##############################################################
 
