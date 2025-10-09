@@ -13,6 +13,30 @@ using DataFrames
 
 file_path = "/Users/hezhushan/Downloads/Gender_Classification_Data.csv"
 
+<<<<<<< HEAD
+=======
+data = CSV.read(file_path, DataFrame)
+import Pkg
+Pkg.add("Plots")
+Pkg.add("StatsPlots")
+Pkg.add.("PlotlyJS")
+Pkg.add("Statistics")
+using CSV
+using DataFrames
+using Plots
+using StatsPlots
+using Statistics
+using PlotlyJS
+
+
+#--- Section ---
+using CSV
+using DataFrames
+
+# Load the dataset from the repository
+df = df = CSV.read("/Users/hezhushan/Downloads/Gender_Classification_Data.csv", DataFrame)
+
+>>>>>>> 47bb9b21276eabbbfa56908eb363661ed8e4a13d
 # --- Label gender Sort female and male Compare M vs F at every index leveln ---
 using CSV
 using DataFrames

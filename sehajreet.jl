@@ -1,61 +1,47 @@
+ 
+using Statistics
+using PlotlyJS
+using CSV
+using DataFrames
+using HypothesisTests
+   
+# Check unique gender values
+println("Unique genders: ", unique(df.gender))
 
-##############################################################
-# 3) Stats: % within BMI by age interval + Chi-square
-##############################################################
+# Count samples by gender
+println("Count by gender:")
+println(combine(groupby(df, :gender), nrow => :Count))
 
-# Percent within BMI_Index by AgeInterval
-counts = combine(groupby(dropmissing(df, [:BMI_Index, :AgeInterval]),
-                         [:BMI_Index, :AgeInterval]), nrow => :count)
+# Count by gender and BMI_Index
+gender_bmi_stats = combine(groupby(df, [:gender, :BMI_Index]), nrow => :Count)
+println("Count by gender and BMI_Index:")
+println(gender_bmi_stats)
 
-# compute % within each BMI_Index
-counts = combine(groupby(counts, :BMI_Index)) do sdf
-    total = sum(sdf.count)
-    sdf[:, :pct_within_bmi] = round.(100 .* sdf.count ./ max(total, 1); digits=1)
-    sdf
-end
+# Create a pivot table (compare male vs female at each BMI_Index)
+pivot_table = unstack(gender_bmi_stats, :gender, :Count)
+rename!(pivot_table, Dict("female" => "Female_Count", "male" => "Male_Count"))
+println("Pivot table (Male vs Female at each BMI_Index):")
+println(pivot_table)
 
-pivot_pct = unstack(counts, :BMI_Index, :AgeInterval, :pct_within_bmi)
-println("\n% within BMI_Index by AgeInterval:"); println(pivot_pct)
+# Add proportions for better comparison
+pivot_table.Female_Proportion = pivot_table.Female_Count ./ (pivot_table.Female_Count .+ pivot_table.Male_Count)
+pivot_table.Male_Proportion = pivot_table.Male_Count ./ (pivot_table.Female_Count .+ pivot_table.Male_Count)
 
-# Chi-square: AgeInterval vs BMI_Index
-cont_table = combine(groupby(dropmissing(df, [:AgeInterval, :BMI_Index]),
-                             [:AgeInterval, :BMI_Index]), nrow => :count)
-pivot_chi = unstack(cont_table, :AgeInterval, :BMI_Index, :count)
-pivot_chi = coalesce.(pivot_chi, 0)  # fill missing counts with 0
-mat = Matrix{Int}(select(pivot_chi, Not(:AgeInterval)))
+println("Pivot table with proportions:")
+println(pivot_table)
 
-try
-    test_result = ChisqTest(mat)
-    println("\nChi-square test:"); println(test_result)
-    println(pvalue(test_result) < 0.05 ?
-        "→ Significant association between BMI and AgeInterval." :
-        "→ No strong evidence of association between BMI and AgeInterval.")
-catch e
-    @warn "Chi-square test failed" error=e
-end
-
-##############################################################
-# 4) Gender comparison
-##############################################################
-if :gender in names(df)
-    # normalize gender strings & drop missings
-    df.gender = map(x -> ismissing(x) ? missing : lowercase(string(x)), df.gender)
-    gd = dropmissing(df, [:gender, :BMI_Index])
-    gender_stats = combine(groupby(gd, [:gender, :BMI_Index]), nrow => :Count)
-    println("\nCounts by gender and BMI_Index:"); println(gender_stats)
-else
-    @warn "No :gender column found; skipping gender analyses."
-end
-
-male_df   = filter(row -> haskey(row, :gender) && row.gender == "male",   df)
-female_df = filter(row -> haskey(row, :gender) && row.gender == "female", df)
-
-##############################################################
-# 5) Visualizations (PlotlyJS)
+# Print side-by-side comparison
+for row in eachrow(pivot_table)
+    println("BMI_Index $(row.BMI_Index): Female $(row.Female_Count) vs Male $(row.Male_Count)")
+end                                                                                                                                     # 5) Visualizations (PlotlyJS)
 ##############################################################
 
 # (A) Scatter: Height vs Weight by gender
+
 if !isempty(male_df) && !isempty(female_df)
+    male_df   = df[df.gender .== "male", :]
+female_df = df[df.gender .== "female", :]
+
     male_trace = scatter(x=male_df.weight, y=male_df.height,
         mode="markers", marker=attr(color="steelblue", size=7, opacity=0.6), name="Male")
     female_trace = scatter(x=female_df.weight, y=female_df.height,
@@ -83,6 +69,19 @@ if !isempty(male_df) && !isempty(female_df)
 end
 
 # (D) BMI Distribution (% by category)
+##############################################################
+# Create BMI_Category column from BMI_Index 
+if !(:BMI_Category in names(df))
+    function bmi_category(idx)
+        idx == 1 ? "Underweight" :
+        idx == 2 ? "Normal" :
+        idx == 3 ? "Overweight" :
+        idx == 4 ? "Obese I"   : "Obese II+"
+    end
+
+    df.BMI_Category = map(x -> ismissing(x) ? missing : bmi_category(x), df.BMI_Index)
+end
+
 counts_bmi = combine(groupby(dropmissing(df, :BMI_Category), :BMI_Category), nrow => :Count)
 total_bmi = max(sum(counts_bmi.Count), 1)
 counts_bmi.Percent = round.(counts_bmi.Count ./ total_bmi .* 100, digits=2)
@@ -130,30 +129,16 @@ function bmi_percentile(bmi_value, bmi_values_vec)
     return round(sum(bmi_values_vec .<= bmi_value) / length(bmi_values_vec) * 100, digits=2)
 end
 
-function interpret_percentile(p)
-    if p < 10
-        "You are in the **lowest 10%** of BMI (much below most people)."
-    elseif p < 25
-        "You are in the **bottom 25%** (below average BMI)."
-    elseif p < 50
-        "You are **below average** BMI."
-    elseif p < 75
-        "You are **above average** BMI."
-    elseif p < 90
-        "You are in the **top 25%** of BMI (higher than most people)."
-    else
-        "You are in the **highest 10%** of BMI (very high compared to others)."
-    end
-end
-
+include("src/interpret_percentile.jl")
 # Example student input (change live in REPL during class)
 age    = 21
 weight = 68.0   # kg
 height = 160.0   # cm
 
 student_bmi = calc_bmi(weight, height)
-student_idx = bmi_index_from_value(student_bmi)
-student_cat = bmi_category_from_index(student_idx)
+student_idx = bmi_index(student_bmi)       
+student_cat = bmi_category(student_idx)    
+
 student_pct = bmi_percentile(student_bmi, bmi_values)
 interp      = interpret_percentile(student_pct)
 
@@ -193,6 +178,7 @@ layout_cdf = Layout(
     legend = attr(x=0.02, y=0.98)
 )
 
-display(plot([trace_curve, trace_p10, trace_p90, trace_point], layout_cdf)) 
-##############################################################
+display(plot([trace_curve, trace_p10, trace_p90, trace_point], layout_cdf))
+##############################################################"                                                   
+                                              
 
