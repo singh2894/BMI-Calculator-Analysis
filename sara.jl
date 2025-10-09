@@ -5,8 +5,8 @@ Pkg.resolve()
 using CSV
 using DataFrames
 
-# Replace "filename.csv" with the actual CSV file name in your repository
-df = CSV.read("updated_Gender_Classification_Data.csv", DataFrame)
+include("src-bmi-index.jl")
+df = CSV.read("Gender_Classification_Data.csv", DataFrame)
 
 # Display the first few rows
 println(first(df, 5))
