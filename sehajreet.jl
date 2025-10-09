@@ -37,7 +37,10 @@ end                                                                             
 ##############################################################
 
 # (A) Scatter: Height vs Weight by gender
-
+# Define male and female subsets first
+male_df = df[df.gender .== "male", :]
+female_df = df[df.gender .== "female", :]
+# Check if they are not empty before plotting
 if !isempty(male_df) && !isempty(female_df)
     male_df   = df[df.gender .== "male", :]
 female_df = df[df.gender .== "female", :]
