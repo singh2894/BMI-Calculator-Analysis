@@ -1,0 +1,349 @@
+﻿    1 using Gtk
+    2 using CSV
+    3 using DataFrames
+    4 using Plots
+    5 using Printf
+    6 
+    7 # --- Create Window ---
+    8 # Enlarge the window for a roomier layout
+    9 win = GtkWindow("Body Mass Index", 800, 600)
+   10 
+   11 # --- Create Outer Box (Center alignment) ---
+   12 outer_box = GtkBox(:v)
+   13 set_gtk_property!(outer_box, :halign, GtkAlign.CENTER)
+   14 set_gtk_property!(outer_box, :valign, GtkAlign.CENTER)
+   15 push!(win, outer_box)
+   16 
+   17 # --- Create Grid Layout ---
+   18 grid = GtkGrid()
+   19 set_gtk_property!(grid, :column_spacing, 15)
+   20 set_gtk_property!(grid, :row_spacing, 12)
+   21 
+   22 # Center the grid using horizontal and vertical spacers
+   23 center_row = GtkBox(:h)
+   24 left_spacer = GtkLabel("")
+   25 right_spacer = GtkLabel("")
+   26 set_gtk_property!(left_spacer, :hexpand, true)
+   27 set_gtk_property!(right_spacer, :hexpand, true)
+   28 push!(center_row, left_spacer)
+   29 push!(center_row, grid)
+   30  
+   31 # --- Informational side panel: title, formula, categories, optional image ---
+   32 info_box = GtkBox(:v)
+   33 set_gtk_property!(info_box, :margin_start, 24)
+   34 
+   35 title_lbl = GtkLabel("")
+   36 set_gtk_property!(title_lbl, :use_markup, true)
+   37 set_gtk_property!(title_lbl, :label, "<span size='18pt' weight='bold'>Body Mass Index</span>")
+   38 set_gtk_property!(title_lbl, :halign, GtkAlign.START)
+   39 
+   40 desc_lbl = GtkLabel("")
+   41 set_gtk_property!(desc_lbl, :use_markup, true)
+   42 set_gtk_property!(desc_lbl, :label,
+   43     "<span size='12pt'>BMI = weight (kg) / (height (m))Â²\n\nCategories:\nâ€¢ Underweight: &lt; 18.5\nâ€¢ Normal: 18.5â€“24.9\nâ€¢ Overweight: 25â€“29.9\nâ€¢ Obesity: â‰¥ 30</span>")
+   44 set_gtk_property!(desc_lbl, :halign, GtkAlign.START)
+   45 set_gtk_property!(desc_lbl, :wrap, true)
+   46 set_gtk_property!(desc_lbl, :justify, GtkJustification.LEFT)
+   47 
+   48 # Optional image if a local file exists (bmi.png)
+   49 try
+   50     if isfile("bmi.png")
+   51         bmi_img = GtkImage("bmi.png")
+   52         push!(info_box, bmi_img)
+   53     end
+   54 catch
+   55     # If image load fails, quietly ignore
+   56 end
+   57 
+   58 push!(info_box, title_lbl)
+   59 push!(info_box, desc_lbl)
+   60 
+   61 sep = GtkSeparator(:v)
+   62 set_gtk_property!(sep, :margin_start, 16)
+   63 set_gtk_property!(sep, :margin_end, 16)
+   64 
+   65 push!(center_row, sep)
+   66 push!(center_row, info_box)
+   67 push!(center_row, right_spacer)
+   68 
+   69 top_spacer = GtkLabel("")
+   70 bottom_spacer = GtkLabel("")
+   71 set_gtk_property!(top_spacer, :vexpand, true)
+   72 set_gtk_property!(bottom_spacer, :vexpand, true)
+   73 push!(outer_box, top_spacer)
+   74 push!(outer_box, center_row)
+   75 push!(outer_box, bottom_spacer)
+   76 
+   77 # --- Labels ---
+   78 age_label = GtkLabel("")
+   79 gender_label = GtkLabel("")
+   80 height_label = GtkLabel("")
+   81 weight_label = GtkLabel("")
+   82 for (lbl, txt) in zip((age_label, gender_label, height_label, weight_label), ("Age (years):", "Gender:", "Height (cm):", "Weight (kg):"))
+   83     set_gtk_property!(lbl, :use_markup, true)
+   84     set_gtk_property!(lbl, :label, "<span size='16pt'>$(txt)</span>")
+   85 end
+   86 
+   87 # --- Center align label text ---
+   88 for lbl in [age_label, gender_label, height_label, weight_label]
+   89     set_gtk_property!(lbl, :halign, GtkAlign.END)
+   90 end
+   91 
+   92 # --- Entry boxes ---
+   93 age_entry = GtkEntry()
+   94 height_entry = GtkEntry()
+   95 weight_entry = GtkEntry()
+   96 
+   97 # Make entry boxes larger and add helpful placeholders
+   98 for (e, ph) in zip((age_entry, height_entry, weight_entry), ("e.g., 25", "e.g., 170", "e.g., 65"))
+   99     set_gtk_property!(e, :width_chars, 18)
+  100     set_gtk_property!(e, :height_request, 36)
+  101     try
+  102         set_gtk_property!(e, :placeholder_text, ph)
+  103     catch
+  104         # placeholder_text may not be available on older GTK; ignore if not
+  105     end
+  106 end
+  107 
+  108 # --- Gender radio buttons ---
+  109 gender_box = GtkBox(:h)
+  110 set_gtk_property!(gender_box, :spacing, 12)
+  111 male_btn = GtkRadioButton("Male")
+  112 female_btn = GtkRadioButton(male_btn, "Female")
+  113 set_gtk_property!(male_btn, :active, true)  # default selection
+  114 push!(gender_box, male_btn)
+  115 push!(gender_box, female_btn)
+  116 
+  117 # --- Button ---
+  118 # Bigger submit button with larger text
+  119 submit_btn = GtkButton()
+  120 set_gtk_property!(submit_btn, :width_request, 120)
+  121 set_gtk_property!(submit_btn, :height_request, 32)
+  122 set_gtk_property!(submit_btn, :hexpand, false)
+  123 set_gtk_property!(submit_btn, :halign, GtkAlign.CENTER)
+  124 set_gtk_property!(submit_btn, :can_focus, false)       # avoid focus ring resizing
+  125 set_gtk_property!(submit_btn, :receives_default, false) # avoid default button outline
+  126 submit_lbl = GtkLabel("")
+  127 set_gtk_property!(submit_lbl, :use_markup, true)
+  128 set_gtk_property!(submit_lbl, :label, "<span size='12pt' weight='bold'>Submit</span>")
+  129 push!(submit_btn, submit_lbl)
+  130 
+  131 # --- Output Label ---
+  132 result_label = GtkLabel("")
+  133 set_gtk_property!(result_label, :use_markup, true)
+  134 set_gtk_property!(result_label, :wrap, true)
+  135 set_gtk_property!(result_label, :justify, GtkJustification.CENTER)
+  136 set_gtk_property!(result_label, :halign, GtkAlign.CENTER)
+  137 try
+  138     set_gtk_property!(result_label, :xalign, 0.5)
+  139 catch
+  140 end
+  141 set_gtk_property!(result_label, :label, "<span size='13pt'></span>")
+  142 
+  143 # --- Add widgets to grid (centered layout) ---
+  144 grid[1, 1] = age_label
+  145 grid[2, 1] = age_entry
+  146 grid[1, 2] = gender_label
+  147 grid[2, 2] = gender_box
+  148 grid[1, 3] = height_label
+  149 grid[2, 3] = height_entry
+  150 grid[1, 4] = weight_label
+  151 grid[2, 4] = weight_entry
+  152 grid[1:2, 5] = submit_btn
+  153 grid[1:2, 6] = result_label
+  154 
+  155 # --- Analysis output: percentile text + plot image ---
+  156 analysis_label = GtkLabel("")
+  157 set_gtk_property!(analysis_label, :use_markup, true)
+  158 set_gtk_property!(analysis_label, :wrap, true)
+  159 set_gtk_property!(analysis_label, :justify, GtkJustification.CENTER)
+  160 set_gtk_property!(analysis_label, :halign, GtkAlign.CENTER)
+  161 plot_img = GtkImage()
+  162 set_gtk_property!(plot_img, :halign, GtkAlign.CENTER)
+  163 set_gtk_property!(plot_img, :valign, GtkAlign.CENTER)
+  164 grid[1:2, 7] = analysis_label
+  165 grid[1:2, 8] = plot_img
+  166 
+  167 # --- Center-align grid contents ---
+  168 set_gtk_property!(grid, :halign, GtkAlign.CENTER)
+  169 set_gtk_property!(grid, :valign, GtkAlign.CENTER)
+  170 # Add small margins for breathing room
+  171 set_gtk_property!(grid, :margin_top, 6)
+  172 set_gtk_property!(grid, :margin_bottom, 6)
+  173 set_gtk_property!(grid, :margin_start, 6)
+  174 set_gtk_property!(grid, :margin_end, 6)
+  175 
+  176 # --- Size groups to align labels/inputs consistently ---
+  177 label_group = GtkSizeGroup(:horizontal)
+  178 for w in (age_label, gender_label, height_label, weight_label)
+  179     push!(label_group, w)
+  180 end
+  181 input_group = GtkSizeGroup(:horizontal)
+  182 for w in (age_entry, gender_box, height_entry, weight_entry)
+  183     push!(input_group, w)
+  184 end
+  185 
+  186 # --- Popup error dialog ---
+  187 function show_error(message::String)
+  188     dlg = GtkDialog("Error", "Close" => 1)
+  189     lbl = GtkLabel(message)
+  190     push!(dlg.vbox, lbl)
+  191     showall(dlg)
+  192     run(dlg)
+  193     destroy(dlg)
+  194 end
+  195 
+  196 # --- BMI index helper ---
+  197 function bmi_index(bmi)
+  198     if bmi < 18.5
+  199         return 1  # Underweight
+  200     elseif bmi < 25
+  201         return 2  # Normal
+  202     elseif bmi < 30
+  203         return 3  # Overweight
+  204     elseif bmi < 35
+  205         return 4  # Obese Class I
+  206     else
+  207         return 5  # Obese Class II+
+  208     end
+  209 end
+  210 
+  211 # --- Dataset loading and plotting helpers ---
+  212 const BMI_DATA = Ref{Vector{Float64}}()
+  213 
+  214 function find_dataset_path()
+  215     candidates = [
+  216         "clean_dataset.csv",
+  217         "Dataset.csv",
+  218         "data.csv",
+  219     ]
+  220     for p in candidates
+  221         if isfile(p)
+  222             return p
+  223         end
+  224     end
+  225     return nothing
+  226 end
+  227 
+  228 function load_bmi_data!()
+  229     if BMI_DATA[] !== nothing
+  230         return BMI_DATA[]
+  231     end
+  232     path = find_dataset_path()
+  233     if path === nothing
+  234         BMI_DATA[] = Float64[]
+  235         return BMI_DATA[]
+  236     end
+  237     df = CSV.read(path, DataFrame)
+  238     # normalize column names
+  239     rename!(df, Dict(n => Symbol(lowercase(String(n))) for n in names(df)))
+  240     if :bmi âˆˆ names(df)
+  241         bmis = skipmissing(df[:, :bmi]) |> collect |> Float64.
+  242     elseif (:height âˆˆ names(df)) && (:weight âˆˆ names(df))
+  243         bmis = Float64.(df.weight) ./ (Float64.(df.height) ./ 100).^2
+  244     else
+  245         BMI_DATA[] = Float64[]
+  246         return BMI_DATA[]
+  247     end
+  248     # keep only finite, reasonable values
+  249     bmis = filter(x -> isfinite(x) && 10.0 <= x <= 60.0, bmis)
+  250     BMI_DATA[] = bmis
+  251     return BMI_DATA[]
+  252 end
+  253 
+  254 function percentile_breakdown(bmis::Vector{Float64}, user_bmi::Float64)
+  255     n = length(bmis)
+  256     if n == 0
+  257         return 0.0, 0.0
+  258     end
+  259     less = count(<(user_bmi), bmis) / n * 100
+  260     greater = count(>(user_bmi), bmis) / n * 100
+  261     return less, greater
+  262 end
+  263 
+  264 function plot_bmi_histogram(bmis::Vector{Float64}, user_bmi::Float64, outpath::AbstractString)
+  265     if isempty(bmis)
+  266         return false
+  267     end
+  268     # Create histogram and mark user's BMI
+  269     default(; dpi=140)
+  270     plt = histogram(bmis;
+  271         bins=:auto, color=:steelblue, alpha=0.7, label="Population",
+  272         xlabel="BMI", ylabel="Count", title="BMI Distribution",
+  273         legend=false)
+  274     vline!([user_bmi]; color=:red, lw=2)
+  275     try
+  276         savefig(plt, outpath)
+  277         return true
+  278     catch
+  279         return false
+  280     end
+  281 end
+  282 
+  283 # --- Submit button click event ---
+  284 function on_submit(widget)
+  285     try
+  286         age = parse(Int, get_gtk_property(age_entry, :text, String))
+  287         height = parse(Float64, get_gtk_property(height_entry, :text, String))
+  288         weight = parse(Float64, get_gtk_property(weight_entry, :text, String))
+  289         gender = if get_gtk_property(male_btn, :active, Bool)
+  290             "Male"
+  291         elseif get_gtk_property(female_btn, :active, Bool)
+  292             "Female"
+  293         else
+  294             "Unspecified"
+  295         end
+  296 
+  297         if height <= 0 || weight <= 0 || age <= 0
+  298             show_error("Values must be positive numbers.")
+  299             return
+  300         end
+  301 
+  302         bmi = weight / (height / 100)^2
+  303         idx = bmi_index(bmi)
+  304         category = if bmi < 18.5
+  305             "Underweight"
+  306         elseif bmi < 25
+  307             "Normal"
+  308         elseif bmi < 30
+  309             "Overweight"
+  310         elseif bmi < 35
+  311             "Obese Class I"
+  312         else
+  313             "Obese Class II+"
+  314         end
+  315         line1 = "Age: $age years | Gender: $gender"
+  316         line2 = "BMI: $(round(bmi, digits=2)) | Category: $category (index $idx)"
+  317         set_gtk_property!(result_label, :label, "<span size='14pt'>$(line1)\n$(line2)</span>")
+  318 
+  319         # Analysis: compare to dataset and plot
+  320         bmis = load_bmi_data!()
+  321         less, greater = percentile_breakdown(bmis, bmi)
+  322         if !isempty(bmis)
+  323             msg = @sprintf("<span size='12pt'>Compared to the dataset: %.1f%% have lower BMI, %.1f%% have higher BMI.</span>", less, greater)
+  324             set_gtk_property!(analysis_label, :label, msg)
+  325             outpath = joinpath(pwd(), "bmi_histogram.png")
+  326             if plot_bmi_histogram(bmis, bmi, outpath)
+  327                 try
+  328                     set_gtk_property!(plot_img, :file, outpath)
+  329                 catch
+  330                     # If :file isn't supported, replace the image widget
+  331                     new_img = GtkImage(outpath)
+  332                     set_gtk_property!(new_img, :halign, GtkAlign.CENTER)
+  333                     set_gtk_property!(new_img, :valign, GtkAlign.CENTER)
+  334                     grid[1:2, 8] = new_img
+  335                 end
+  336             end
+  337         else
+  338             set_gtk_property!(analysis_label, :label, "<span size='12pt'>Dataset not found. Place clean_dataset.csv or data.csv in the project folder.</span>")
+  339         end
+  340 
+  341     catch e
+  342         show_error("âŒ Invalid input detected. Please enter valid numeric values.")
+  343     end
+  344 end
+  345 
+  346 signal_connect(on_submit, submit_btn, "clicked")
+  347 
+  348 # --- Show Window ---
+  349 showall(win)
