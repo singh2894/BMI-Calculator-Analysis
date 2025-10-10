@@ -10,7 +10,74 @@ using PlotlyJS
 include("src-bmi-index.jl")
 
 # Replace "filename.csv" with the actual CSV file name in your repository
-df = CSV.read("Gender_Classification_Data.csv", DataFrame)
+# Read raw CSV (prefer repo file)
+raw_path = joinpath(@__DIR__, "Unclean_Gender_Classification_Data.csv")
+if isfile(raw_path)
+    raw_df = CSV.read(raw_path, DataFrame)
+else
+    # fallback to data.csv in repo
+    raw_df = CSV.read(joinpath(@__DIR__, "data.csv"), DataFrame)
+end
+
+# --- Begin user cleaning steps ---
+# Round height and weight (if present)
+if :height in names(raw_df)
+    try
+        raw_df.height = round.(Float64.(raw_df.height), digits=1)
+    catch
+        # keep as-is if conversion fails
+    end
+end
+if :weight in names(raw_df)
+    try
+        raw_df.weight = round.(Float64.(raw_df.weight), digits=1)
+    catch
+    end
+end
+
+# Define validity checks
+function is_valid(row)
+    # require columns exist
+    for col in (:age, :height, :weight)
+        if !(col in propertynames(row)) || ismissing(row[col])
+            return false
+        end
+    end
+    age = try
+        Float64(row[:age])
+    catch
+        return false
+    end
+    height = try
+        Float64(row[:height])
+    catch
+        return false
+    end
+    weight = try
+        Float64(row[:weight])
+    catch
+        return false
+    end
+    valid_age = 18.0 <= age <= 60.0
+    valid_height = 144.0 <= height <= 210.0
+    valid_weight = 34.0 <= weight <= 120.0
+    return valid_age && valid_height && valid_weight
+end
+
+# Show invalid rows
+invalid_rows = filter(row -> !is_valid(row), eachrow(raw_df))
+println("Invalid rows:")
+println(DataFrame(invalid_rows))
+
+# Keep only valid rows
+clean_df = filter(is_valid, eachrow(raw_df)) |> DataFrame
+
+# Save cleaned data (optional)
+CSV.write(joinpath(@__DIR__, "Clean_dataset.csv"), clean_df)
+
+# Use the cleaned dataframe for the rest of the analysis
+df = clean_df
+# --- End user cleaning steps ---
 
 # Display the first few rows
 println(first(df, 5))
@@ -373,7 +440,7 @@ layout_cdf = Layout(
 )
 
 display(plot([trace_curve, trace_p10, trace_p90, trace_point], layout_cdf))
-##############################################################"                                                   
-                                              
+##############################################################
+
 
 
