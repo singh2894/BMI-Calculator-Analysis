@@ -21,8 +21,8 @@ using CSV, DataFrames, StatsBase, Statistics, PlotlyJS, Printf
 const SHOW_PLOTS = true   # set false to only save HTML
 
 # ====== 1) File paths (EDIT THESE) ======
-dataset_path = raw"C:\Users\Simran\OneDrive\Desktop\BMI Calculator Analysis\output\updated_Gender_Classification_Data.csv"
-user_path    = raw"C:\Users\Simran\OneDrive\Desktop\BMI Calculator Analysis\output\user_data.csv"
+dataset_path = CSV.read("updated_Gender_Classification_Data.csv", DataFrame)
+user_path    = CSV.read("user_data.csv", DataFrame)
 
 # ====== 2) Load (clean CSVs with standard headers) ======
 df     = CSV.read(dataset_path, DataFrame)  # large population (e.g., 10,000 rows)
@@ -175,5 +175,6 @@ println("───────────────────────�
 @printf "User BMI = %.2f (%s). Percentile ≈ %.1f%%\n" user_bmi user_cat user_percentile
 @printf "Overweight+ share = %.1f%% | Below user = %.1f%% | Above user = %.1f%%\n" prop_overweight_plus pct_below_user pct_above_user
 println("────────────────────────────────────────────────────────")
+
 
 
