@@ -205,11 +205,12 @@ function save_user_data(age::Int, gender::String, height_cm::Float64, weight_kg:
     newfile = !isfile(path)
     open(path, "a") do io
         if newfile
-            println(io, "timestamp,age,gender,height_cm,weight_kg,bmi,index,category")
+            # Header exactly as requested (order matters)
+            println(io, "gender,height,weight,age,BMI,BMI_Index")
         end
-        ts = Dates.format(now(), dateformat"yyyy-mm-dd HH:MM:SS")
-        @printf(io, "%s,%d,%s,%.2f,%.2f,%.2f,%d,%s\n",
-                ts, age, gender, height_cm, weight_kg, bmi, idx, category)
+        # Row values in the same order as the header
+        @printf(io, "%s,%.2f,%.2f,%d,%.2f,%d\n",
+                gender, height_cm, weight_kg, age, bmi, idx)
     end
 end
 
