@@ -32,6 +32,7 @@ include("src/visualizing.jl")
 include("src/helpers.jl")
 include("src/calc_bmi.jl")
 include("src/userinterface.jl")
+include("src/Analysis.jl")
 
 ##### Main app logic
 function start_app()
