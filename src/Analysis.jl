@@ -16,9 +16,9 @@ using CSV, DataFrames, StatsBase, Statistics, PlotlyJS, Printf
 # ====== 0) Settings ======
 const SHOW_PLOTS = true   # set false to only save HTML and avoid any on-screen plots
 
-# ====== 1) File paths (EDIT THESE) ======
-dataset_path = raw"C:\Users\Simran\OneDrive\Desktop\BMI Calculator Analysis\output\updated_Gender_Classification_Data.csv"
-user_path    = raw"C:\Users\Simran\OneDrive\Desktop\BMI Calculator Analysis\output\user_data.csv"
+# ====== 1) File paths (relative, cross-shell) ======
+dataset_path = joinpath(@__DIR__, "updated_Gender_Classification_Data.csv")
+user_path    = joinpath(@__DIR__, "user_data.csv")
 
 # ====== 2) Helpers ======
 # detect tab/comma/semicolon
@@ -66,11 +66,10 @@ function harmonize!(df::DataFrame)
         :bmi=>:BMI, :bmi_index=>:BMI_index, :index=>:BMI_index
     )
     for (k,v) in ren
-        if k in names(df) && v != k
+        if k in propertynames(df) && v != k
             rename!(df, k=>v)
         end
     end
-    # drop artifacts like :column7 …
     for nm in names(df)
         s = String(nm)
         if startswith(s, "column") && !(nm in KEEP)
@@ -78,8 +77,8 @@ function harmonize!(df::DataFrame)
         end
     end
     for c in KEEP
-        if !(c in names(df))
-            df[!, c] = missing
+        if !(c in propertynames(df))
+            df[!, c] = fill(missing, nrow(df))
         end
     end
     return df
@@ -103,30 +102,31 @@ harmonize!(userdf)
 
 # convert numerics
 for col in (:height, :weight, :BMI, :BMI_index, :age)
-    if col in names(df);     df[!, col]     = passmissing(parse_float).(df[!, col]);     end
-    if col in names(userdf); userdf[!, col] = passmissing(parse_float).(userdf[!, col]); end
+    if col in propertynames(df);     df[!, col]     = passmissing(parse_float).(df[!, col]);     end
+    if col in propertynames(userdf); userdf[!, col] = passmissing(parse_float).(userdf[!, col]); end
 end
 
 # ====== 4) Remove decimals first (round) ======
-if :height in names(df);     df.height     = passmissing(x->round(Int, x)).(df.height);     end
-if :weight in names(df);     df.weight     = passmissing(x->round(Int, x)).(df.weight);     end
-if :height in names(userdf); userdf.height = passmissing(x->round(Int, x)).(userdf.height); end
-if :weight in names(userdf); userdf.weight = passmissing(x->round(Int, x)).(userdf.weight); end
+if :height in propertynames(df);     df.height     = passmissing(x->round(Int, x)).(df.height);     end
+if :weight in propertynames(df);     df.weight     = passmissing(x->round(Int, x)).(df.weight);     end
+if :height in propertynames(userdf); userdf.height = passmissing(x->round(Int, x)).(userdf.height); end
+if :weight in propertynames(userdf); userdf.weight = passmissing(x->round(Int, x)).(userdf.weight); end
 
 # compute BMI if missing (using rounded ints)
-if :BMI in names(df)
+if :BMI in propertynames(df)
     df.BMI = ifelse.(ismissing.(df.BMI),
-                     bmi_from.(Float64.(df.height), Float64.(df.weight)),
-                     Float64.(df.BMI))
+                     bmi_from.(df.height, df.weight),
+                     passmissing(Float64).(df.BMI))
 else
-    df.BMI = bmi_from.(Float64.(df.height), Float64.(df.weight))
+    df.BMI = bmi_from.(df.height, df.weight)
 end
 
 # user BMI
 if nrow(userdf) == 0
     error("user_data.csv appears empty.")
 end
-user_row = userdf[1, :]
+# Use the last row as the most recent entry
+user_row = userdf[end, :]
 user_bmi = get(user_row, :BMI, missing)
 if ismissing(user_bmi)
     h = get(user_row, :height, missing)
@@ -150,7 +150,7 @@ prop_overweight_plus = 100 * mean(bmis .>= 25.0)
 pct_below_user = 100 * mean(bmis .< user_bmi)
 pct_above_user = 100 - pct_below_user
 
-println("Summary → BMI=$(round(user_bmi, digits=2)) | Cat=$user_cat | Perc≈$(round(user_percentile, digits=1))% | Overweight+≈$(round(prop_overweight_plus, digits=1))%")
+println("Summary — BMI=$(round(user_bmi, digits=2)) | Category=$user_cat | Percentile=$(round(user_percentile, digits=1))% | Overweight+=$(round(prop_overweight_plus, digits=1))%")
 
 # ====== 6) Visuals ======
 user_color       = "#d62728"
@@ -190,11 +190,11 @@ user_marker = scatter(x=[user_bmi], y=[F(user_bmi)], mode="markers+text", name="
                       textposition="top center")
 layoutB = Layout(
     title = "Where Does the User Lie? (ECDF)",
-    xaxis_title = "BMI", yaxis_title = "Fraction ≤ BMI",
+    xaxis_title = "BMI", yaxis_title = "Fraction of Population",
     showlegend = false,
     annotations = [
         attr(x=0.98, y=0.18, xref="paper", yref="paper", xanchor="right", showarrow=false,
-             text=@sprintf("User BMI = %.2f (%s)<br>Percentile: %.1f%%<br>Below: %.1f%% · Above: %.1f%%",
+             text=@sprintf("User BMI = %.2f (%s)<br>Percentile: %.1f%%<br>Below: %.1f%% | Above: %.1f%%",
                            user_bmi, user_cat, user_percentile, pct_below_user, pct_above_user),
              font=attr(size=13))
     ]
@@ -202,7 +202,7 @@ layoutB = Layout(
 pltB = Plot([cdf_trace, user_marker], layoutB)
 
 # C) Height vs Weight (robust)
-have_hw = all(Symbol.(["height","weight"]) .∈ Ref(names(df)))
+have_hw = all(s -> s in propertynames(df), Symbol.( ["height","weight"] ))
 if have_hw
     mask = .!(ismissing.(df.height)) .& .!(ismissing.(df.weight)) .& .!(ismissing.(df.BMI))
     hvals = Float64.(df.height[mask])
@@ -215,7 +215,7 @@ if have_hw
         cloud = scatter(x=hvals, y=wvals, mode="markers", name="Population",
                         marker=attr(size=6, color=bvals, colorscale="Viridis",
                                     showscale=true, colorbar=attr(title="BMI")))
-        tracesC = PlotlyJS.SyncPlot[cloud]
+        tracesC = PlotlyJS.GenericTrace[cloud]
         uh = get(user_row, :height, missing); uw = get(user_row, :weight, missing)
         if !(ismissing(uh) || ismissing(uw))
             push!(tracesC, scatter(x=[Float64(uh)], y=[Float64(uw)], mode="markers+text", name="User",
@@ -235,7 +235,7 @@ end
 cat_order = ["Underweight","Normal","Overweight","Obese I","Obese II+"]
 df_valid.BMI_cat = [bmi_index_and_category(b)[2] for b in df_valid.BMI]
 df_valid.BMI_cat = map(cat -> (cat in cat_order) ? cat : "Other", df_valid.BMI_cat)
-box_traces = PlotlyJS.Plot[]
+box_traces = PlotlyJS.GenericTrace[]
 for cat in cat_order
     vals = Float64.(df_valid.BMI[df_valid.BMI_cat .== cat])
     !isempty(vals) && push!(box_traces, box(y=vals, name=cat, boxpoints="outliers",
@@ -250,13 +250,13 @@ layoutD = Layout(title="BMI by Category — User Marked", yaxis_title="BMI", sho
                                    font=attr(size=13, color=accent_color))])
 pltD = Plot([box_traces... , user_ref], layoutD)
 
-# E) Bar: counts by BMI category × gender
-if :gender in names(df_valid)
+# E) Bar: counts by BMI category and gender
+if :gender in propertynames(df_valid)
     g = coalesce.(String.(df_valid.gender), "Unknown")
     c = coalesce.(String.(df_valid.BMI_cat), "Missing")
     tbl = combine(groupby(DataFrame(gender=g, cat=c), [:gender, :cat]), nrow => :count)
     bars = bar(x=tbl.cat, y=tbl.count, transforms=[attr(type="groupby", groups=tbl.gender)])
-    layoutE = Layout(title="Counts by BMI Category × Gender",
+    layoutE = Layout(title="Counts by BMI Category and Gender",
                      xaxis_title="BMI Category", yaxis_title="Count", barmode="group")
     pltE = Plot(bars, layoutE)
 else
@@ -264,8 +264,8 @@ else
 end
 
 # F) Violin: BMI by gender
-if :gender in names(df_valid)
-    vio_traces = PlotlyJS.Plot[]
+if :gender in propertynames(df_valid)
+    vio_traces = PlotlyJS.GenericTrace[]
     for g in unique(skipmissing(df_valid.gender))
         push!(vio_traces, violin(y=Float64.(df_valid.BMI[df_valid.gender .== g]),
                                  name=String(g), box_visible=true, meanline_visible=true))
@@ -282,18 +282,23 @@ if SHOW_PLOTS
     display(pltD); display(pltE); display(pltF)
 end
 
-isdir("output") || mkpath("output")
+outdir = joinpath(@__DIR__, "output")
+isdir(outdir) || mkpath(outdir)
 try
-    PlotlyJS.savehtml(pltA, joinpath("output", "bmi_histogram.html"))
-    PlotlyJS.savehtml(pltB, joinpath("output", "where_user_lies.html"))
-    println("Saved HTML → output/bmi_histogram.html, output/where_user_lies.html")
+    PlotlyJS.savefig(pltA, joinpath(outdir, "bmi_histogram.html"))
+    PlotlyJS.savefig(pltB, joinpath(outdir, "where_user_lies.html"))
+    PlotlyJS.savefig(pltC, joinpath(outdir, "height_vs_weight.html"))
+    PlotlyJS.savefig(pltD, joinpath(outdir, "bmi_by_category.html"))
+    PlotlyJS.savefig(pltE, joinpath(outdir, "counts_by_category_gender.html"))
+    PlotlyJS.savefig(pltF, joinpath(outdir, "bmi_by_gender_violin.html"))
+    println("Saved HTML to: ", outdir)
 catch e
     @warn "Could not save HTML plots" exception=(e, catch_backtrace())
 end
 
-println("────────────────────────────────────────────────────────")
-@printf "User BMI = %.2f (%s). Percentile ≈ %.1f%%\n" user_bmi user_cat user_percentile
+println(repeat("-", 72))
+@printf "User BMI = %.2f (%s). Percentile = %.1f%%\n" user_bmi user_cat user_percentile
 @printf "Overweight+ share = %.1f%% | Below user = %.1f%% | Above user = %.1f%%\n" prop_overweight_plus pct_below_user pct_above_user
-println("────────────────────────────────────────────────────────")
+println(repeat("-", 72))
 
 nothing  # prevent VS Code from auto-rendering last value twice
