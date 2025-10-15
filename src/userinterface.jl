@@ -35,7 +35,7 @@ function show_ui()
 
     subtitle = GtkLabel("")
     set_gtk_property!(subtitle, :use_markup, true)
-    set_gtk_property!(subtitle, :label, "<span size='16000' weight='bold' foreground='#555555'>BMI = weight (kg) / (height (m))²</span>")
+    set_gtk_property!(subtitle, :label, "<span size='16000' weight='bold' foreground='#555555'>BMI = weight (kg) / (height (cm)/100)²</span>")
     set_gtk_property!(subtitle, :xalign, 0.5)
 
     push!(outer, title)
