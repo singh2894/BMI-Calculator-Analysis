@@ -1,3 +1,9 @@
+using Printf
+using Dates
+import Pkg 
+Pkg.add("Gtk") # Ensure Gtk is installed
+using Gtk 
+using Gtk.ShortNames
 
 # -------------------- BMI helpers --------------------
 const THRESH = [18.5, 25.0, 30.0, 35.0]
@@ -117,13 +123,19 @@ function show_ui()
     grid[1:2, 5] = result
 
     # --- Size groups for neat alignment ---
-    lg = Gtk.GtkSizeGroup(:horizontal)
-    for w in (age_label, gender_label, height_label, weight_label)
-        push!(lg, w)
-    end
-    ig = Gtk.GtkSizeGroup(:horizontal)
-    for w in (age_entry, gender_box, height_entry, weight_entry)
-        push!(ig, w)
+    # Gtk.jl does not export GtkSizeGroup on all platforms/versions; size groups are cosmetic.
+    # Fall back to a no-op if the constructor isn't available.
+    try
+        lg = Gtk.GtkSizeGroup(:horizontal)
+        for w in (age_label, gender_label, height_label, weight_label)
+            push!(lg, w)
+        end
+        ig = Gtk.GtkSizeGroup(:horizontal)
+        for w in (age_entry, gender_box, height_entry, weight_entry)
+            push!(ig, w)
+        end
+    catch
+        # noop: continue without size groups
     end
 
     # -------------------- Live preview --------------------
@@ -234,7 +246,22 @@ function show_ui()
         end
     end
 
-    # -------------------- Show --------------------
-    showall(win)
-    Gtk.GtkMain()
+    return win
 end
+    # -------------------- Show --------------------
+
+# If this file is executed directly (julia userinterface.jl), launch the UI.
+# When included with `include("userinterface.jl")` the function is only defined.
+if abspath(PROGRAM_FILE) == @__FILE__
+    win = show_ui()
+    try
+        showall(win)
+        Gtk.gtk_main()
+    catch e
+        @warn "Failed to show GTK window or start main loop" exception=(e, catch_backtrace())
+    end
+end
+
+
+
+
