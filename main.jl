@@ -60,12 +60,11 @@ function start_app()
     # Here we're going to visualize the data
     show_charts(updated_clean_df)
 
-    # TODO: Fix the error with Gtk on MacOS
     # Show the user interface
-    # show_ui()
-
-    # TODO: after fetching the input data from the UI, call the 'analyse()' method to show the given info
-
+    ui = show_ui()
+    showall(ui)
+    Gtk.gtk_main()
+    
 end
 
 #### Start the app and path all the paths
